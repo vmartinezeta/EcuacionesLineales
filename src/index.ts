@@ -3,7 +3,7 @@ enum Signo {
     MENOS = -1
 }
 
-type TSigno = Signo.MENOS | Signo.MAS
+type TSigno = Signo
 
 type TLetra = "a" | "b" | "c" | "m" | "n" | "o" | "p" | "q" | "x" | "y" | "z"
 
@@ -29,9 +29,11 @@ type TTerminoReducibleOrNull = TTerminoReducible | null
 
 type TMiembroEcuacion = {
     terminos: TTerminoReducible[]
+    extraerConstante : () => TTerminoReducibleOrNull
+    extraerTermino : () => TTerminoReducibleOrNull
 }
 
-class Constante implements TReducible<TConstante> {
+class ConstanteFactory implements TReducible<TConstante> {
     public signo: TSigno
     public coeficiente: number
 
@@ -48,11 +50,17 @@ class Constante implements TReducible<TConstante> {
     }
 
     getSigno(numero: number): TSigno {
-        return numero > 0 ? 1 : -1
+        return numero > 0 ? Signo.MAS : Signo.MENOS
     }
 }
 
-class Termino extends Constante implements TReducible<TTerminoAlgebraico> {
+class Constante extends ConstanteFactory {
+    constructor(signo: TSigno, coeficiente: number) {
+        super(signo, coeficiente)
+    }
+}
+
+class Termino extends ConstanteFactory implements TReducible<TTerminoAlgebraico> {
     public literal: TLiteral
 
     constructor(signo: TSigno, coeficiente: number, literal: TLiteral) {
@@ -75,7 +83,21 @@ class MiembroEcuacion implements TMiembroEcuacion {
         this.terminos = terminos
     }
 
+    extraerConstante() {
+        const idx = this.terminos.findIndex(t=>t instanceof Constante)
+        if (idx<0) return null
+        const [termino]=this.terminos.splice(idx, 1)
+        return termino
+    }
+
+    extraerTermino() {
+        const idx = this.terminos.findIndex(t=>t instanceof Termino)
+        if (idx<0) return null
+        const [termino] = this.terminos.splice(idx, 1)
+        return termino
+    }
 }
+
 
 class Calculadora {
     public miembroIzq: TMiembroEcuacion
@@ -88,29 +110,39 @@ class Calculadora {
 
     resolver() {
         let reducir = true
-        while (this.miembroIzq.terminos.length > 1 ) {
+        while (this.miembroIzq.terminos.length > 1) {
             if (reducir) {
-                if (this.miembroIzq.terminos.every(t => t instanceof Termino)) {
-                    this.reducirSemejantes()
-                }
-
-                if (this.miembroDer.terminos.length>1 && !this.miembroDer.terminos.some(t => t instanceof Termino)) {
-                    this.reducir()
-                }
-                reducir = !reducir
+                this.reducirTodo()
             } else {
-                const idx = this.miembroIzq.terminos.findIndex(element => !(element instanceof Termino))
-                if (idx>=0) {
-                    const [origen] = this.miembroIzq.terminos.splice(idx, 1)
-                    this.transponer(origen, this.miembroDer)
-                }
-                reducir = !reducir
+                this.transponerTodo()
             }
+            reducir = !reducir
         }
 
         const [{ coeficiente: c1 }] = this.miembroIzq.terminos
         const [{ coeficiente: c2 }] = this.miembroDer.terminos
         console.log("x = ", c2 / c1)
+    }
+
+    reducirTodo() {
+        if (this.miembroIzq.terminos.every(t => t instanceof Termino)) {
+            this.reducirSemejantes()
+        }
+
+        if (this.miembroDer.terminos.length > 1 && this.miembroDer.terminos.every(t => t instanceof Constante)) {
+            this.reducir()
+        }
+    }
+
+    transponerTodo() {
+        const origen = this.miembroIzq.extraerConstante()
+        if (origen) {
+            this.transponer(origen, this.miembroDer)
+        }
+        const origen2 = this.miembroDer.extraerTermino()
+        if (origen2) {
+            this.transponer(origen2, this.miembroIzq)
+        }
     }
 
     reducirSemejantes() {
@@ -131,20 +163,21 @@ class Calculadora {
         this.miembroDer.terminos.push(valor)
     }
 
-    transponer(origen: TTerminoReducible, miembro:MiembroEcuacion) {
-        origen.signo = Signo.MENOS*origen.signo
+    transponer(origen: TTerminoReducible, miembro: MiembroEcuacion) {
+        origen.signo = Signo.MENOS * origen.signo
         miembro.terminos.push(origen)
     }
 }
 
 const calculadora = new Calculadora(
     new MiembroEcuacion([
-        new Termino(Signo.MAS, 10, "x"),
+        new Termino(Signo.MAS, 15, "x"),
         new Constante(Signo.MAS, 10),
         new Termino(Signo.MENOS, 5, "x"),
     ]),
     new MiembroEcuacion([
-        new Constante(Signo.MAS, 60)
+        new Constante(Signo.MAS, 60),
+        new Termino(Signo.MAS, 5, "x"),
     ])
 )
 
